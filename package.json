@@ -1,0 +1,21 @@
+{
+  "name": "flowbot",
+  "version": "0.0.0",
+  "description": "A helpful Slack Bot that will prevent you from breaking your co-worker's 'flow'.",
+  "main": "src",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node ."
+  },
+  "author": "Suyash Unnithan",
+  "license": "ISC",
+  "dependencies": {
+    "@slack/rtm-api": "^5.0.5",
+    "@slack/web-api": "^5.12.0",
+    "chrono-node": "^2.1.8",
+    "dedent-js": "^1.0.1",
+    "dotenv": "^8.2.0",
+    "esm": "^3.2.25",
+    "moment": "^2.29.1"
+  }
+}
