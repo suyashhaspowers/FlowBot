@@ -1,5 +1,5 @@
 # FlowBot
-Slack Bot which prevents you from breaking your co-worker's "flow" state by scheduling your messages at a desired time.
+Slack Bot which prevents you from breaking your co-worker's "flow" state by scheduling your messages to be sent at a later time.
 
 ## Installation
 
