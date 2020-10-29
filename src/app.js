@@ -10,6 +10,8 @@ const moment = require('moment');
 const chrono = require('chrono-node');
 const dedent = require('dedent-js');
 
+var message_sessions = {};
+
 
 rtm.start()
     .catch(console.error);
@@ -41,7 +43,7 @@ async function sendMessageNow(channel, message) {
 
 // Function that sends message at posted time
 async function sendMessageLater(channel, message, time) {
-    try {
+    try{
         await web.chat.scheduleMessage({
             channel: channel,
             text: message,
@@ -51,7 +53,7 @@ async function sendMessageLater(channel, message, time) {
         })
     }
     catch(e) {
-        console.error(e);
+        throw e;
     }
 }
 
@@ -83,69 +85,34 @@ async function checkUserExists(user) {
 } 
 
 async function handleMessage(event) {
-    var message;
-    var send_date;
-    var reciever;
-    var incorrect_time = false;
-    var non_existent_user = false;
-    if (event.text == '!start' || event.text == '!restart') {
-        // Start Command
-        message = 'Hey! Who would you like to message?';
+    var session_existence = get_existence(event.user);
+    var session;
+    var user_id = event.user;
+    var message = "";
+    var message_needed = false;
+
+    if (session_existence) {
+        session = get_session(user_id);
+    }
+
+    if (!session_existence && event.text == '!start') {
+        create_session(user_id, event);
     }
     else if (event.text == '!help') {
-        // Help Command
-        message = `Welcome to FlowBot! FlowBot allows you to schedule your messages such that you don't interrupt and break your co-worker's state of flow. To get started, type *!start* . If you want to restart, simply input *!restart* .`;
+        message = `Welcome to FlowBot! FlowBot allows you to schedule your messages such that you don't interrupt and break your co-worker's state of flow. To get started, type *!start* . If you want to restart, simply input *!restart* . If you decide that you want to end your flowbot session early, enter *!end*.`;
+        message_needed = true;
     }
-    else if (event.text.includes("<@") && event.text.includes(">")) {
-        // Process the reciepient and see if they exist in the workspace
-        const user_id = event.text.substr(2, event.text.length - 3);
-        const exists = checkUserExists(user_id);
-
-        if (exists) {
-            message = dedent`Enter the message you wanted to send them. Include the message within triple quotations (""") to help me better read it.
-        
-            ex. 
-            """ Sample message """`;
-        }
-        else {
-            message = "Unknown user. Please re-enter a valid user or type *!help* to get help.";
-        }
-    }
-    else if (event.text.includes('"""')) {
-        // Get message body command
-        message = dedent`How long from now would you like me to send this message?
-        
-        ex. 
-        25 minutes from now`;
+    else if (session_existence) {
+        handle_session(session, event);
     }
     else {
-        try {
-            // Try to send scheduled message
-            send_date = get_datetime_object(event.text);
-            const message_details = await find_message_and_reciever(event.channel);
-            var ts = Math.round(send_date.getTime() / 1000);
-
-            var formatted_message = dedent(`
-            Hey! This is a scheduled FlowBot Message sent by: <@${event.user}>
-                
-            *Message:*
-            ${message_details['message']}
-            `);
-
-            sendMessageLater(message_details['reciever'], formatted_message, ts);
-            message = 'Your message will be sent!';
-            console.log({
-                message: formatted_message,
-                timestamp: ts
-            });
-            
-        } catch(e) {
-            // There is no scheduled message and instead, this is an unknown command
-            console.log(e);
-            message = "Unknown command! To get help, simply input *!help* or to start, input *!start* .'";
-        }
+        message = "Unknown command! To get help, simply input *!help* or to start, input *!start* .";
+        message_needed = true;
     }
-    sendMessageNow(event.channel, message);
+
+    if (message_needed) {
+        sendMessageNow(event.channel, message);
+    }
 }
 
 // NLP Library that parses date from string
@@ -155,14 +122,121 @@ function get_datetime_object(message) {
     return get_date;
 }
 
-// Function to find send_message and reciever
-async function find_message_and_reciever(channel) {
-    const history = (await getChatHistory(channel, 5))['messages'];
-    var reciever_raw = history[4].text
-    var reciever_clean = reciever_raw.substr(2, reciever_raw.length - 3)
-    const message_details = {
-        message: history[2].text,
-        reciever: reciever_clean
-    };
-    return message_details;
+function get_existence(user_id) {
+    if (message_sessions.hasOwnProperty(user_id)){
+        return true;
+    }
+    return false;
+}
+
+function get_session(user_id) {
+    return message_sessions[user_id];
+}
+
+function create_session(user_id, event) {
+    var session = {
+        step: 0,
+        message: "",
+        reciever: "",
+        send_time: 0,
+    }
+
+    message_sessions[user_id] = session;
+    handle_session(message_sessions[user_id], event);
+}
+
+async function delete_session(user_id) {
+    delete message_sessions[user_id];
+}
+
+async function handle_session(session, event) {
+    // Session Guidelines:
+    // step == 0 - user has just entered !start
+    // step == 1 - user must now enter who they would like to message
+    // step == 2 - user must enter the message they would like to send
+    // step == 3 - user must enter the time they want to send the message
+    // step == 4 - user has supplied all information, message will be scheduled, session object will be removed, session destroyed
+    // event.text == "!restart" - step goes back to 0 and all other values are reset
+    // event.text == "!end" - ends session
+
+    var message;
+
+    if (event.text == "!end") {
+        await delete_session(user_id);
+        message = "I just ended your FlowBot session! To get started again, please enter *!start* or type in *!help* to learn how to use me!" ;
+    }
+
+    if (event.text == "!restart") {
+        session.step = 0;
+        session.message = "";
+        session.reciever = "";
+        session.send_time = 0;
+    }
+    
+    if (session.step == 0) {
+        message = 'Hey! Who would you like to message?';
+        session.step = 1;
+    }
+    else if (session.step == 1) {
+        //Process the reciepient and see if they exist in the workspace
+        const user_id = event.text.substr(2, event.text.length - 3);
+        const exists = await checkUserExists(user_id);
+
+        if (exists) {
+            message = dedent`What did you want to say to them?
+        
+            ex. 
+            Hey, I was just wondering if you were available for a quick call on Friday?`;
+            session.reciever = user_id;
+            session.step = 2;
+        }
+        else {
+            message = "I'm not sure I understand. You can start by typing *@* to see a list of users to message. For more information use the *!help* command.";
+        }
+    }
+    else if (session.step == 2) {
+        message = dedent`How long from now would you like me to send this message?
+            ex. 
+            25 minutes from now`;
+        session.message = event.text;
+        session.step = 3;
+    }
+    else if (session.step == 3) {
+        try {
+            session.send_time = get_datetime_object(event.text);
+            session.send_time = Math.round(session.send_time.getTime() / 1000);
+            session.step = 4;
+        }
+        catch(e) {
+            message = dedent`I am having trouble undertsanding the time that you provided. Could you try again?
+            ex.
+            1 minute from now`
+        }
+    }
+
+    if (session.step == 4) {
+        try {
+            var formatted_message = dedent(`
+                Hey! This is a scheduled FlowBot Message sent by: <@${event.user}>
+                    
+                *Message:*
+                ${session.message}`
+            );
+
+            await sendMessageLater(session.reciever, formatted_message, session.send_time);
+            message = 'Your message will be sent!';
+            console.log(session);
+
+            await delete_session(event.user);
+        }
+        catch(e) {
+            console.log(e);
+            const error_name = e.data.error;
+            if (error_name == 'time_in_past') {
+                message = 'The time you entered was either in the past or too close to the current time. Please re-enter a new time.';
+                session.step = 3;
+            }
+        }
+    }
+    sendMessageNow(event.channel, message);
 }
