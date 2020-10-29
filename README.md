@@ -1,5 +1,5 @@
 # FlowBot
-Slack Bot which prevents you from breaking your co-worker's "flow" state by scheduling your messages to be sent at a later time.
+Being in a state of flow is generally described as keeping your full focus and attention on completing one task. Distractions such as social media and notifications can cause people to break their state of flow as it causes them to divert their attention away from the task at hand. Slack Bot is a chat bot service which prevents you from breaking your co-worker's "flow" state by scheduling the message that you wanted to send to them for a later time.
 
 ## Installation
 
@@ -28,6 +28,8 @@ npm start
 `!start` - FlowBot will start messaging process
 
 `!restart` - FlowBot will restart messaging process
+
+`!end` - FlowBot will end your current session (only to be used when a FlowBot session has started)
 
 `!help` - FlowBot will tell you how to use its features
 
